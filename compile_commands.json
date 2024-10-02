@@ -1,0 +1,7 @@
+[
+	{
+		"directory": "/root/Programming/MyProjects/clocks_arduino",
+		"command": "avr-gcc -Os -DF_CPU=16000000UL -mmcu=atmega328p -I/usr/lib/avr/include -c main.c",
+		"file": "main.c"
+	}
+]
