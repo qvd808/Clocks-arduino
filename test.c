@@ -1,6 +1,28 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
+// Assuming you're using a UART for debugging
+#define BAUD 9600
+#define F_CPU 16000000UL  // Adjust this to your AVR's clock speed
+#include <util/setbaud.h>
+
+void uart_init() {
+    UBRR0H = UBRRH_VALUE;
+    UBRR0L = UBRRL_VALUE;
+    UCSR0B = (1<<TXEN0);
+    UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);
+}
+
+void uart_putchar(char c) {
+    while (!(UCSR0A & (1<<UDRE0)));
+    UDR0 = c;
+}
+
+void uart_puts(const char* s) {
+    while (*s) {
+        uart_putchar(*s++);
+    }
+}
 
 void setup() {
     DDRB |= 0b00011111; // Set PB0-PB4 as output (EN, D4-D7)
@@ -53,19 +75,39 @@ void initialize_lcd() {
 }
 
 void test() {
-    clear_screen();   // Clear the display first
-    _delay_ms(200);   // Short delay for the clear command
-    lcd_data('B');    // Send 'B' to the LCD
-    _delay_ms(1000);  // Wait for 1 second
-    clear_screen();   // Clear the display again
-    _delay_ms(1000);  // Wait for 1 second
+    uart_puts("Clearing screen\r\n");
+    clear_screen();
+    _delay_ms(200);
+
+    uart_puts("Printing 'A'\r\n");
+    lcd_data('B');
+    _delay_ms(1000);
+
+    uart_puts("Clearing screen again\r\n");
+    clear_screen();
+    _delay_ms(200);
+
+    uart_puts("Printing 'Hello'\r\n");
+    lcd_data('H');
+    lcd_data('e');
+    lcd_data('l');
+    lcd_data('l');
+    lcd_data('o');
+    _delay_ms(1000);
 }
 
 int main(void) {
-    setup();           // Initialize ports
-    initialize_lcd();  // Set up the LCD
-	
+    uart_init();
+    uart_puts("Starting LCD test\r\n");
+
+    setup();
+    uart_puts("Ports initialized\r\n");
+
+    initialize_lcd();
+    uart_puts("LCD initialized\r\n");
+
     while (1) {
-        test();  // Run the test function continuously
+        test();
+        _delay_ms(3000);  // Wait 3 seconds before repeating
     }
 }
