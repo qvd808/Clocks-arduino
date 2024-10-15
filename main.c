@@ -1,112 +1,123 @@
 #include <avr/io.h>
-#include <stdint.h>
 #include <util/delay.h>
+#include <avr/interrupt.h>
 
+// Time settings
+volatile uint8_t hours = 11;
+volatile uint8_t minutes = 34;
+volatile uint8_t seconds = 0;
 
-void setup() {
-    DDRB |= 0b00011111; // Set PB0-PB4 as output (EN, D4-D7)
-    DDRD |= (1 << DDD7); // Set PD7 as output (RS)
-}
-
+// Function to pulse the Enable pin of the LCD
 void enable_pulse() {
-    PORTB |= (1 << PORTB0);  // EN = 1
-    _delay_us(1);             // Allow LCD to process
-    PORTB &= ~(1 << PORTB0);  // EN = 0
-    _delay_us(50);             // Allow LCD to process
+    PORTB |= (1 << PORTB0);  // Set EN = 1
+    _delay_us(1);             // Short delay
+    PORTB &= ~(1 << PORTB0);  // Set EN = 0
+    _delay_ms(2);             // Allow command to execute
 }
 
+// Send a command to the LCD
 void lcd_command(uint8_t cmd) {
-    PORTD &= ~(1 << PORTD7); // RS = 0 for command mode
+    PORTD &= ~(1 << PORTD7);  // RS = 0 (command mode)
 
-    PORTB = (PORTB & 0xE1) | (((cmd >> 4) & 0x0F) << 1);  // High nibble
+    // Send high nibble
+    PORTB = (PORTB & 0xE1) | ((cmd >> 4) << 1);
     enable_pulse();
-    PORTB = (PORTB & 0xE1) | ((cmd & 0x0F) << 1);  // Low nibble
+
+    // Send low nibble
+    PORTB = (PORTB & 0xE1) | ((cmd & 0x0F) << 1);
     enable_pulse();
 }
 
+// Send data to the LCD
 void lcd_data(uint8_t data) {
-    PORTD |= (1 << PORTD7);  // RS = 1 for data mode
+    PORTD |= (1 << PORTD7);  // RS = 1 (data mode)
 
-    PORTB = (PORTB & 0xE1) | (((data >> 4) & 0x0F) << 1);  // High nibble
+    // Send high nibble
+    PORTB = (PORTB & 0xE1) | ((data >> 4) << 1);
     enable_pulse();
-    PORTB = (PORTB & 0xE1) | ((data & 0x0F) << 1);  // Low nibble
+
+    // Send low nibble
+    PORTB = (PORTB & 0xE1) | ((data & 0x0F) << 1);
     enable_pulse();
 }
 
+// Clear the LCD screen
 void clear_screen() {
-    lcd_command(0x01); // Clear display
-    _delay_ms(2);      // Increased delay for clear command
+    lcd_command(0x01);  // Clear display command
+    _delay_ms(2);       // Delay to complete the operation
 }
 
+// Initialize the LCD
 void initialize_lcd() {
-    _delay_ms(50);   // Increased delay for power-up
-    lcd_command(0x33); // Initialize in 8-bit mode first
-    _delay_ms(5);    // Added delay
-    lcd_command(0x32); // Switch to 4-bit mode
-    _delay_ms(1);    // Added delay
-    lcd_command(0x28); // 2 lines, 5x8 matrix
-    _delay_ms(1);    // Added delay
-    lcd_command(0x0C); // Display ON, cursor OFF
-    _delay_ms(1);    // Added delay
-    lcd_command(0x06); // Entry mode: cursor moves right
-    _delay_ms(1);    // Added delay
-    clear_screen();  // Clear display as part of initialization
+    _delay_ms(50);      // Allow LCD time to power up
+    lcd_command(0x33);  // Initialize to 8-bit mode
+    _delay_ms(5);
+    lcd_command(0x32);  // Switch to 4-bit mode
+    _delay_ms(1);
+    lcd_command(0x28);  // 2 lines, 5x8 matrix
+    lcd_command(0x0C);  // Display ON, cursor OFF
+    lcd_command(0x06);  // Entry mode set: increment cursor
+    clear_screen();     // Clear display
 }
 
-void test() {
-    clear_screen();   // Clear the display first
-    _delay_ms(200);   // Short delay for the clear command
-    lcd_data('B');    // Send 'B' to the LCD
-    _delay_ms(1000);  // Wait for 1 second
-    clear_screen();   // Clear the display again
-    _delay_ms(1000);  // Wait for 1 second
+// Display time on the LCD
+void display_time(uint8_t h, uint8_t m, uint8_t s) {
+    lcd_command(0x80);  // Set cursor to the first line
+
+    // Display hours
+    lcd_data('0' + h / 10);
+    lcd_data('0' + h % 10);
+    lcd_data(':');
+
+    // Display minutes
+    lcd_data('0' + m / 10);
+    lcd_data('0' + m % 10);
+    lcd_data(':');
+
+    // Display seconds
+    lcd_data('0' + s / 10);
+    lcd_data('0' + s % 10);
 }
 
-void display_time(int n) {
-	clear_screen();
-	int minute = n / 60;
-	int seconds = n - (60 * minute);
-	char display_minute[2] = {48, 48};
-	char display_seconds[2]= {48, 48};
-
-	int8_t i = 0;
-	while (minute > 0) {
-		display_minute[i++] = minute % 10 + '0';
-		minute /= 10;
-	}
-	i = 0;
-	while (seconds > 0) {
-		display_seconds[i++] = seconds % 10 + '0';
-		seconds /= 10;
-	}
-	for (int j = 1; j >= 0; j--) {
-		lcd_data(display_minute[j]);
-	}
-	lcd_data(':');
-	for (int j = 1; j >= 0; j--) {
-		lcd_data(display_seconds[j]);
-	}
-
+void setup_timer() {
+    TCCR1A = 0;  // Normal mode
+    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);  // CTC mode, prescaler 1024
+    OCR1A = 15624;  // For 1 second interrupt at 16 MHz
+    TIMSK1 |= (1 << OCIE1A);  // Enable compare match interrupt
 }
 
-void delay_one_second() {
-	for (uint32_t i = 0; i < 16000000; i++) {
-		asm volatile ("nop");
-	}
-}
-
-int main(void) {
-    setup();           // Initialize ports
-    initialize_lcd();  // Set up the LCD
-	
-	int current_time = 0;
-	
-    while (1) {
-		display_time(current_time);
-		current_time++;
-		_delay_ms(1000);
-		if (current_time >= 3600) {
-			current_time = 0;
-		}
+// Timer compare match interrupt handler
+ISR(TIMER1_COMPA_vect) {
+    seconds++;
+    if (seconds >= 60) {
+        seconds = 0;
+        minutes++;
+        if (minutes >= 60) {
+            minutes = 0;
+            hours = (hours + 1) % 24;
+        }
     }
 }
+
+// Main function
+int main(void) {
+    DDRB |= 0b00011111;  // Set PB0-PB4 as output
+    DDRD |= (1 << DDD7);  // Set PD7 as output
+
+    initialize_lcd();  // Initialize LCD
+    setup_timer();     // Setup timer
+    sei();             // Enable global interrupts
+
+    while (1) {
+        // Disable interrupts to safely access shared variables
+        cli();
+        uint8_t current_hours = hours;
+        uint8_t current_minutes = minutes;
+        uint8_t current_seconds = seconds;
+        sei();  // Re-enable interrupts
+
+        display_time(current_hours, current_minutes, current_seconds);
+        _delay_ms(100);  // Small delay to prevent too frequent updates
+    }
+}
+
