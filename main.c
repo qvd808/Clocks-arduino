@@ -1,4 +1,5 @@
 #include <avr/io.h>
+#include <stdint.h>
 #include <util/delay.h>
 
 
@@ -61,11 +62,51 @@ void test() {
     _delay_ms(1000);  // Wait for 1 second
 }
 
+void display_time(int n) {
+	clear_screen();
+	int minute = n / 60;
+	int seconds = n - (60 * minute);
+	char display_minute[2] = {48, 48};
+	char display_seconds[2]= {48, 48};
+
+	int8_t i = 0;
+	while (minute > 0) {
+		display_minute[i++] = minute % 10 + '0';
+		minute /= 10;
+	}
+	i = 0;
+	while (seconds > 0) {
+		display_seconds[i++] = seconds % 10 + '0';
+		seconds /= 10;
+	}
+	for (int j = 1; j >= 0; j--) {
+		lcd_data(display_minute[j]);
+	}
+	lcd_data(':');
+	for (int j = 1; j >= 0; j--) {
+		lcd_data(display_seconds[j]);
+	}
+
+}
+
+void delay_one_second() {
+	for (uint32_t i = 0; i < 16000000; i++) {
+		asm volatile ("nop");
+	}
+}
+
 int main(void) {
     setup();           // Initialize ports
     initialize_lcd();  // Set up the LCD
 	
+	int current_time = 0;
+	
     while (1) {
-        test();  // Run the test function continuously
+		display_time(current_time);
+		current_time++;
+		_delay_ms(1000);
+		if (current_time >= 3600) {
+			current_time = 0;
+		}
     }
 }
